@@ -17,8 +17,7 @@ args = parser.parse_args()
 
 models = [args.model]
 
-strategies = ['bf16', 'fp16']
-# strategies = ['bf16', 'fp16', 'fp32', 'fp16i8']
+strategies = ['bf16', 'fp16', 'fp32', 'fp16i8', 'fp16@*1', 'fp16@*4', 'fp16@*8', 'fp16@*10']
 
 columns = ['Device'] + strategies
 
@@ -28,7 +27,7 @@ vast_id = {}
 
 vast_dev_names = {'1080': 'GTX_1080', '2080': 'RTX_2080', '3080': 'RTX_3080', '4090': 'RTX_4090'}
 
-devices = ['4090']
+devices = ['4090', '3080', '2080', '1080']
 
 
 class NoInstanceError(RuntimeError):
@@ -85,7 +84,7 @@ table = wandb.Table(columns=columns)
 
 def scp(src, dst, dst_ip, dst_port):
     print(f"scp from {src} to {dst} of {dst_ip}:{dst_port}")
-    subprocess.run(['scp', '-o', 'StrictHostKeyChecking=no', '-P', str(dst_port), src, f'{dst_ip}:{dst}'], stderr=subprocess.STDOUT)
+    subprocess.check_call(['scp', '-o', 'StrictHostKeyChecking=no', '-P', str(dst_port), src, f'{dst_ip}:{dst}'], stderr=subprocess.STDOUT)
 
 
 def check_output(command, print_output):
@@ -99,11 +98,11 @@ def check_output(command, print_output):
     assert proc.wait() == 0, f"Command {' '.join(command)} failed with stdout {stdout}"
     return stdout.strip()
 
-
 for device in devices:
     if device in ['cpu', local_device]:
         ssh_prefix = []
-        project_dir = os.path.expanduser('~/files/repos/ChatRWKV')
+        native_project_dir = os.path.expanduser('~/files/repos/ChatRWKV')
+        project_dir = native_project_dir
     else:
         try:
             ssh_prefix = prepare_vastai_env(device)
