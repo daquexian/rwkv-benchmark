@@ -16,12 +16,18 @@ import traceback
 import os
 
 parser = argparse.ArgumentParser(description='Run benchmark')
+parser.add_argument('--backend', type=str, help='RWKV backend', default='ChatRWKV')
 parser.add_argument('--branch', type=str, help='branch of ChatRWKV', default='main')
 parser.add_argument('--model', type=str, help='Model path', required=True)
 parser.add_argument('--verbose', action='store_true', help='Print command output')
 parser.add_argument('-n', type=int, help='Number of runs', required=True)
 parser.add_argument('--log-dir', type=str, help='log dir')
+parser.add_argument('--timeout', type=int, help='timeout for the instance preparation (pulling image, etc.), in seconds', default=900)
 args = parser.parse_args()
+
+if args.log_dir is not None:
+    assert not os.path.exists(args.log_dir) or len(os.listdir(args.log_dir)) == 0, f"Log dir {args.log_dir} is not empty"
+os.makedirs(args.log_dir, exist_ok=True)
 
 wandb.init()
 
@@ -88,7 +94,7 @@ class ChatRWKV(Backend):
         return latency, mem
 
 
-backend = ChatRWKV()
+backend = eval(args.backend)()
 
 
 def prepare_vastai_env(device: str):
@@ -96,13 +102,13 @@ def prepare_vastai_env(device: str):
         output = host_check_output(["vastai", "search", "offers", "cpu_cores_effective>=8", '-o', 'dph', "--raw"])
     else:
         vast_gpu_name = vast_gpu_names[device]
-        output = host_check_output(["vastai", "search", "offers", f"gpu_name={vast_gpu_name} cpu_cores_effective>=8 cuda_vers>=11.8", '-o', 'dph', "--raw", "--ssh", "--direct"])
+        output = host_check_output(["vastai", "search", "offers", f"gpu_name={vast_gpu_name} cpu_cores_effective>=8 cuda_vers>=11.8", '-o', 'dph', "--raw"])
     output = json.loads(output)
     if len(output) == 0:
         raise NoInstanceError(f"No Vast.ai offers found for {device}")
     best = output[0]["id"]
     log(f"Found best offer {best}")
-    output = host_check_output(f"vastai create instance {best} --image {backend.docker_image()} --disk 32 --raw".split())
+    output = host_check_output(f"vastai create instance {best} --image {backend.docker_image()} --disk 32 --raw --ssh --direct".split())
     output = json.loads(output)
     instance_id = output["new_contract"]
     log(f"Created instance {instance_id}, checking status..")
@@ -111,7 +117,7 @@ def prepare_vastai_env(device: str):
     while not flag:
         time.sleep(10)
         waiting_time += 10
-        if waiting_time > 600:
+        if waiting_time > args.timeout:
             raise TimeoutError("Timeout waiting for instance to be ready")
         log("Checking status..")
         # too verbose
@@ -121,8 +127,8 @@ def prepare_vastai_env(device: str):
             if instance["id"] == instance_id:
                 log(f"Instance {instance_id} is {instance['actual_status']}")
                 if instance["actual_status"] == "running":
-                    tl.ssh_user_and_ip = f'root@{instance["ssh_host"]}'
-                    tl.ssh_port = instance["ssh_port"]
+                    tl.ssh_user_and_ip = f'root@{instance["public_ipaddr"]}'
+                    tl.ssh_port = instance["ports"]["22/tcp"][0]["HostPort"]
                     tl.instance_id = instance_id
                     flag = True
                     # sleep for a while to make sure the instance is ready
@@ -166,8 +172,6 @@ def host_check_output(command: List[str]):
 def log(msg):
     if args.log_dir is None:
         return
-    if not os.path.exists(args.log_dir):
-        os.mkdir(args.log_dir)
     with open(os.path.join(args.log_dir, f'{tl.device}.txt'), 'a+') as f:
         f.write(msg + '\n')
 
@@ -179,16 +183,22 @@ def run_on_device(device: str):
         sleep_time = random.randint(0, 20)
         log(f"Sleeping for {sleep_time} seconds to bypass vast.ai rate limit")
         time.sleep(sleep_time)
+        # refactor it as a contextmanager
         prepare_vastai_env(device)
     except NoInstanceError:
         log(f"No instance found for {device}, skipping")
         return
     except TimeoutError:
         log(f"Timeout when preparing {device}, skipping")
+        host_check_output(['vastai', 'destroy', 'instance', str(tl.instance_id)])
         return
     except Exception as e:
         log('Fatal error')
         log(traceback.format_exc())
+        try:
+            host_check_output(['vastai', 'destroy', 'instance', str(tl.instance_id)])
+        except:
+            pass
         return
     project_dir = backend.basename()
     tl.device_type = 'cpu' if device == 'cpu' else 'cuda'
