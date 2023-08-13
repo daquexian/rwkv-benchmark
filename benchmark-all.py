@@ -45,18 +45,6 @@ class TimeoutError(Exception):
     pass
 
 
-@contextmanager
-def time_limit(seconds):
-    def signal_handler(signum, frame):
-        raise TimeoutError()
-    signal.signal(signal.SIGALRM, signal_handler)
-    signal.alarm(seconds)
-    try:
-        yield
-    finally:
-        signal.alarm(0)
-
-
 class NoInstanceError(RuntimeError):
     pass
 
@@ -119,8 +107,12 @@ def prepare_vastai_env(device: str):
     instance_id = output["new_contract"]
     log(f"Created instance {instance_id}, checking status..")
     flag = False
+    waiting_time = 0
     while not flag:
         time.sleep(10)
+        waiting_time += 10
+        if waiting_time > 600:
+            raise TimeoutError("Timeout waiting for instance to be ready")
         log("Checking status..")
         # too verbose
         output = host_check_output(f"vastai show instances --raw".split())
@@ -187,8 +179,7 @@ def run_on_device(device: str):
         sleep_time = random.randint(0, 20)
         log(f"Sleeping for {sleep_time} seconds to bypass vast.ai rate limit")
         time.sleep(sleep_time)
-        with time_limit(60 * 10):
-            prepare_vastai_env(device)
+        prepare_vastai_env(device)
     except NoInstanceError:
         log(f"No instance found for {device}, skipping")
         return
@@ -227,5 +218,10 @@ with concurrent.futures.ThreadPoolExecutor() as executor:
 
 
 wandb.log({'Latency and Memory': table})
+
+if args.log_dir is not None:
+    artifact = wandb.Artifact(name='log', type='log')
+    artifact.add_dir(args.log_dir)
+    wandb.log_artifact(artifact)
 
 wandb.finish()
