@@ -1,1 +1,3 @@
 wandb/
+ssh_*.json
+log/

@@ -7,7 +7,7 @@ import argparse
 import functools
 from collections import defaultdict
 current_path = os.path.dirname(os.path.abspath(__file__))
-sys.path.append(f'{current_path}/../rwkv_pip_package/src')
+sys.path.append(f'{current_path}/rwkv_pip_package/src')
 parser = argparse.ArgumentParser()
 parser.add_argument('--gpu', type=int, default=0)
 parser.add_argument('--model', type=str, default='/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-3b/RWKV-4-Pile-3B-20221110-ctx4096')
