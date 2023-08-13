@@ -91,10 +91,10 @@ class ChatRWKV(Backend):
         return 'daquexian/cuda-pytorch:cu118-dev-2.0.2'
 
     def prepare(self) -> None:
-        scp('benchmark-custom.py', f'{backend.basename()}/benchmark-custom.py')
+        scp('benchmark-chatrwkv.py', f'{backend.basename()}/benchmark-chatrwkv.py')
 
     def run(self, model, strategy, mode) -> Tuple[float, float]:
-        command = ['python3', f'{backend.basename()}/benchmark-custom.py', '--model', f'{model}',
+        command = ['python3', f'{backend.basename()}/benchmark-chatrwkv.py', '--model', f'{model}',
                    '--strategy', f'"{tl.device_type} {strategy}"', '--custom-cuda-op', '--jit', f'--only-{mode}']
         output = run_on_remote(command)
         latency = float(output.splitlines()[-2].split(' ')[2][:-2])

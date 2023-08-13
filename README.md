@@ -5,5 +5,9 @@ It rents GPUs from vast.ai, so make sure you have the vast.ai command line tool 
 Example:
 
 ```
-python3 benchmark-all.py --model xxx.pth --verbose -n 1 --branch daquexian/test --log-dir log
+python3 benchmark.py --model xxx.pth --verbose -n 1 --branch daquexian/test --log-dir log
 ```
+
+### How to add a new backend
+
+Please refer to `ChatRWKV` backend implementation in benchmark-all.py. Typically, a benchmark script (like benchmark_chatrwkv.py) is also needed.
