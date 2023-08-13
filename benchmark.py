@@ -46,7 +46,8 @@ columns = ['Device'] + strategies
 vast_gpu_names = {'1080': 'GTX_1080', '2080Ti': 'RTX_2080_Ti',
                   '3080': 'RTX_3080', '4090': 'RTX_4090'}
 
-devices = ['4090', '3080', '2080Ti', '1080', 'cpu']
+# devices = ['4090', '3080', '2080Ti', '1080', 'cpu']
+devices = ['2080Ti', '1080', 'cpu']
 
 table = wandb.Table(columns=columns)
 
@@ -94,12 +95,13 @@ class ChatRWKV(Backend):
         scp('benchmark-chatrwkv.py', f'{backend.basename()}/benchmark-chatrwkv.py')
 
     def run(self, model, strategy, mode) -> Tuple[float, float]:
+        assert mode == 'one'
         command = ['python3', f'{backend.basename()}/benchmark-chatrwkv.py', '--model', f'{model}',
-                   '--strategy', f'"{tl.device_type} {strategy}"', '--custom-cuda-op', '--jit', f'--only-{mode}']
+                   '--strategy', f'"{tl.device_type} {strategy}"']
         output = run_on_remote(command)
-        latency = float(output.splitlines()[-2].split(' ')[2][:-2])
+        speed = float(output.splitlines()[-2].split(' ')[1])
         mem = float(output.splitlines()[-1].split(' ')[-2])
-        return latency, mem
+        return speed, mem
 
 
 backend = eval(args.backend)()
@@ -222,16 +224,16 @@ def run_on_device(device: str):
         scp(model, f'{project_dir}/{model}')
         data = [device]
         for strategy in strategies:
-            for mode in ['slow']:
+            for mode in ['one']:
                 try:
-                    latency = 99999999999
+                    max_speed = 0
                     for _ in range(args.n):
-                        this_latency, mem = backend.run(
+                        this_speed, mem = backend.run(
                             f'{project_dir}/{model}', strategy, mode)
-                        log(f'Device: {device}, model: {model}, strategy: {strategy}, mode: {mode}, this_latency: {this_latency}, min_latency: {latency}, mem: {mem}')
-                        latency = min(latency, this_latency)
+                        max_speed = max(max_speed, this_speed)
+                        log(f'Device: {device}, model: {model}, strategy: {strategy}, mode: {mode}, this_speed: {this_speed}, max_speed: {max_speed}, mem: {mem}')
                     # type: ignore[reportUnboundVariable]
-                    data.append(f'{latency * 1000:.0f}ms/{mem:.0f}MB')
+                    data.append(f'{max_speed} tokens/sec, {mem:.0f}MB')
                 except:
                     data.append('N/A')
                     log(f'Failed to run {model} on {device} with {strategy}')
