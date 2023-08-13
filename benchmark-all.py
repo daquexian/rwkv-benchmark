@@ -129,7 +129,7 @@ def prepare_vastai_env(device: str):
                 if instance["actual_status"] == "running":
                     tl.ssh_user_and_ip = f'root@{instance["ssh_host"]}'
                     # https://github.com/vast-ai/vast-python/pull/56
-                    tl.ssh_port = instance["ssh_port"] + 1
+                    tl.ssh_port = instance["ssh_port"] - 1
                     tl.instance_id = instance_id
                     flag = True
                     # sleep for a while to make sure the instance is ready
