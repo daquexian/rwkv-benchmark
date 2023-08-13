@@ -96,7 +96,7 @@ def prepare_vastai_env(device: str):
         output = host_check_output(["vastai", "search", "offers", "cpu_cores_effective>=8", '-o', 'dph', "--raw"])
     else:
         vast_gpu_name = vast_gpu_names[device]
-        output = host_check_output(["vastai", "search", "offers", f"gpu_name={vast_gpu_name} cpu_cores_effective>=8 cuda_vers>=11.8", '-o', 'dph', "--raw"])
+        output = host_check_output(["vastai", "search", "offers", f"gpu_name={vast_gpu_name} cpu_cores_effective>=8 cuda_vers>=11.8", '-o', 'dph', "--raw", "--ssh", "--direct"])
     output = json.loads(output)
     if len(output) == 0:
         raise NoInstanceError(f"No Vast.ai offers found for {device}")
