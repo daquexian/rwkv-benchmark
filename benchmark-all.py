@@ -16,28 +16,35 @@ import traceback
 import os
 
 parser = argparse.ArgumentParser(description='Run benchmark')
-parser.add_argument('--backend', type=str, help='RWKV backend', default='ChatRWKV')
-parser.add_argument('--branch', type=str, help='branch of ChatRWKV', default='main')
+parser.add_argument('--backend', type=str,
+                    help='RWKV backend', default='ChatRWKV')
+parser.add_argument('--branch', type=str,
+                    help='branch of ChatRWKV', default='main')
 parser.add_argument('--model', type=str, help='Model path', required=True)
-parser.add_argument('--verbose', action='store_true', help='Print command output')
+parser.add_argument('--verbose', action='store_true',
+                    help='Print command output')
 parser.add_argument('-n', type=int, help='Number of runs', required=True)
 parser.add_argument('--log-dir', type=str, help='log dir')
-parser.add_argument('--timeout', type=int, help='timeout for the instance preparation (pulling image, etc.), in seconds', default=900)
+parser.add_argument('--timeout', type=int,
+                    help='timeout for the instance preparation (pulling image, etc.), in seconds', default=900)
 args = parser.parse_args()
 
 if args.log_dir is not None:
-    assert not os.path.exists(args.log_dir) or len(os.listdir(args.log_dir)) == 0, f'Log dir "{args.log_dir}" is not empty'
+    assert not os.path.exists(args.log_dir) or len(os.listdir(
+        args.log_dir)) == 0, f'Log dir "{args.log_dir}" is not empty'
 os.makedirs(args.log_dir, exist_ok=True)
 
 wandb.init()
 
 models = [args.model]
 
-strategies = ['bf16', 'fp16', 'fp32', 'fp16i8', 'fp16 *1', 'fp16 *4', 'fp16 *8', 'fp16 *10']
+strategies = ['bf16', 'fp16', 'fp32', 'fp16i8',
+              'fp16 *1', 'fp16 *4', 'fp16 *8', 'fp16 *10']
 
 columns = ['Device'] + strategies
 
-vast_gpu_names = {'1080': 'GTX_1080', '2080Ti': 'RTX_2080_Ti', '3080': 'RTX_3080', '4090': 'RTX_4090'}
+vast_gpu_names = {'1080': 'GTX_1080', '2080Ti': 'RTX_2080_Ti',
+                  '3080': 'RTX_3080', '4090': 'RTX_4090'}
 
 devices = ['4090', '3080', '2080Ti', '1080', 'cpu']
 
@@ -87,7 +94,8 @@ class ChatRWKV(Backend):
         scp('benchmark-custom.py', f'{backend.basename()}/benchmark-custom.py')
 
     def run(self, model, strategy, mode) -> Tuple[float, float]:
-        command = ['python3', f'{backend.basename()}/benchmark-custom.py', '--model', f'{model}', '--strategy', f'"{tl.device_type} {strategy}"', '--custom-cuda-op', '--jit', f'--only-{mode}']
+        command = ['python3', f'{backend.basename()}/benchmark-custom.py', '--model', f'{model}',
+                   '--strategy', f'"{tl.device_type} {strategy}"', '--custom-cuda-op', '--jit', f'--only-{mode}']
         output = run_on_remote(command)
         latency = float(output.splitlines()[-2].split(' ')[2][:-2])
         mem = float(output.splitlines()[-1].split(' ')[-2])
@@ -99,16 +107,19 @@ backend = eval(args.backend)()
 
 def prepare_vastai_env(device: str):
     if device == 'cpu':
-        output = run_on_host(["vastai", "search", "offers", "cpu_cores_effective>=8", '-o', 'dph', "--raw"])
+        output = run_on_host(
+            ["vastai", "search", "offers", "cpu_cores_effective>=8", '-o', 'dph', "--raw"])
     else:
         vast_gpu_name = vast_gpu_names[device]
-        output = run_on_host(["vastai", "search", "offers", f"gpu_name={vast_gpu_name} cpu_cores_effective>=8 cuda_vers>=11.8", '-o', 'dph', "--raw"])
+        output = run_on_host(["vastai", "search", "offers",
+                             f"gpu_name={vast_gpu_name} cpu_cores_effective>=8 cuda_vers>=11.8", '-o', 'dph', "--raw"])
     output = json.loads(output)
     if len(output) == 0:
         raise NoInstanceError(f"No Vast.ai offers found for {device}")
     best = output[0]["id"]
     log(f"Found best offer {best}")
-    output = run_on_host(f"vastai create instance {best} --image {backend.docker_image()} --disk 32 --raw".split())
+    output = run_on_host(
+        f"vastai create instance {best} --image {backend.docker_image()} --disk 32 --raw".split())
     output = json.loads(output)
     instance_id = output["new_contract"]
     log(f"Created instance {instance_id}, checking status..")
@@ -135,13 +146,15 @@ def prepare_vastai_env(device: str):
                     time.sleep(5)
                     break
 
-    tl.ssh_prefix = f'ssh -o StrictHostKeyChecking=no -p {tl.ssh_port} {tl.ssh_user_and_ip}'.split()
+    tl.ssh_prefix = f'ssh -o StrictHostKeyChecking=no -p {tl.ssh_port} {tl.ssh_user_and_ip}'.split(
+    )
     run_on_remote(['git', 'clone', backend.github_url()])
     basename = backend.basename()
     if args.branch != 'main':
         if '/' in args.branch:
             user, branch = args.branch.split('/')
-            run_on_remote([f'cd {basename} && git remote add daquexian https://github.com/{user}/{basename} && git fetch {user}'])
+            run_on_remote(
+                [f'cd {basename} && git remote add daquexian https://github.com/{user}/{basename} && git fetch {user}'])
         run_on_remote([f'cd {basename} && git checkout {args.branch}'])
 
     backend.prepare()
@@ -149,7 +162,8 @@ def prepare_vastai_env(device: str):
 
 def scp(src, dst):
     log(f"scp from {src} to {dst} of {tl.ssh_user_and_ip}:{tl.ssh_port}")
-    subprocess.check_call(['scp', '-o', 'StrictHostKeyChecking=no', '-P', str(tl.ssh_port), src, f'{tl.ssh_user_and_ip}:{dst}'], stderr=subprocess.STDOUT, stdout=subprocess.DEVNULL)
+    subprocess.check_call(['scp', '-o', 'StrictHostKeyChecking=no', '-P', str(tl.ssh_port),
+                          src, f'{tl.ssh_user_and_ip}:{dst}'], stderr=subprocess.STDOUT, stdout=subprocess.DEVNULL)
 
 
 def run_on_remote(command: List[str]):
@@ -159,13 +173,15 @@ def run_on_remote(command: List[str]):
 
 def run_on_host(command: List[str]):
     log(f'Running {" ".join(command)}')
-    proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    proc = subprocess.Popen(
+        command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     stdout = ""
-    for line in proc.stdout: # type: ignore
+    for line in proc.stdout:  # type: ignore
         if args.verbose:
             log(line.decode('utf-8').strip())
         stdout += line.decode('utf-8')
-    assert proc.wait() == 0, f"Command {' '.join(command)} failed with stdout {stdout}"
+    assert proc.wait(
+    ) == 0, f"Command {' '.join(command)} failed with stdout {stdout}"
     return stdout.strip()
 
 
@@ -210,10 +226,12 @@ def run_on_device(device: str):
                 try:
                     latency = 99999999999
                     for _ in range(args.n):
-                        this_latency, mem = backend.run(f'{project_dir}/{model}', strategy, mode)
+                        this_latency, mem = backend.run(
+                            f'{project_dir}/{model}', strategy, mode)
                         log(f'Device: {device}, model: {model}, strategy: {strategy}, mode: {mode}, this_latency: {this_latency}, min_latency: {latency}, mem: {mem}')
                         latency = min(latency, this_latency)
-                    data.append(f'{latency * 1000:.0f}ms/{mem:.0f}MB') # type: ignore[reportUnboundVariable]
+                    # type: ignore[reportUnboundVariable]
+                    data.append(f'{latency * 1000:.0f}ms/{mem:.0f}MB')
                 except:
                     data.append('N/A')
                     log(f'Failed to run {model} on {device} with {strategy}')
