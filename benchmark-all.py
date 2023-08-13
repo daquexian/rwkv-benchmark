@@ -108,7 +108,7 @@ def prepare_vastai_env(device: str):
         raise NoInstanceError(f"No Vast.ai offers found for {device}")
     best = output[0]["id"]
     log(f"Found best offer {best}")
-    output = host_check_output(f"vastai create instance {best} --image {backend.docker_image()} --disk 32 --raw --ssh --direct".split())
+    output = host_check_output(f"vastai create instance {best} --image {backend.docker_image()} --disk 32 --raw".split())
     output = json.loads(output)
     instance_id = output["new_contract"]
     log(f"Created instance {instance_id}, checking status..")
@@ -127,8 +127,9 @@ def prepare_vastai_env(device: str):
             if instance["id"] == instance_id:
                 log(f"Instance {instance_id} is {instance['actual_status']}")
                 if instance["actual_status"] == "running":
-                    tl.ssh_user_and_ip = f'root@{instance["public_ipaddr"]}'
-                    tl.ssh_port = instance["ports"]["22/tcp"][0]["HostPort"]
+                    tl.ssh_user_and_ip = f'root@{instance["ssh_host"]}'
+                    # https://github.com/vast-ai/vast-python/pull/56
+                    tl.ssh_port = instance["ssh_port"] + 1
                     tl.instance_id = instance_id
                     flag = True
                     # sleep for a while to make sure the instance is ready
