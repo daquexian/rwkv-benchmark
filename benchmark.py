@@ -110,7 +110,7 @@ backend = eval(args.backend)()
 def prepare_vastai_env(device: str):
     if device == 'cpu':
         output = run_on_host(
-            ["vastai", "search", "offers", "cpu_cores_effective>=8", '-o', 'dph', "--raw"])
+            ["vastai", "search", "offers", "cpu_cores_effective>=16", '-o', 'dph', "--raw"])
     else:
         vast_gpu_name = vast_gpu_names[device]
         output = run_on_host(["vastai", "search", "offers",
