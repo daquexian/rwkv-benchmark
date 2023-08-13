@@ -26,7 +26,7 @@ parser.add_argument('--timeout', type=int, help='timeout for the instance prepar
 args = parser.parse_args()
 
 if args.log_dir is not None:
-    assert not os.path.exists(args.log_dir) or len(os.listdir(args.log_dir)) == 0, f"Log dir {args.log_dir} is not empty"
+    assert not os.path.exists(args.log_dir) or len(os.listdir(args.log_dir)) == 0, f'Log dir "{args.log_dir}" is not empty'
 os.makedirs(args.log_dir, exist_ok=True)
 
 wandb.init()
@@ -88,7 +88,7 @@ class ChatRWKV(Backend):
 
     def run(self, model, strategy, mode) -> Tuple[float, float]:
         command = ['python3', f'{backend.basename()}/benchmark-custom.py', '--model', f'{model}', '--strategy', f'"{tl.device_type} {strategy}"', '--custom-cuda-op', '--jit', f'--only-{mode}']
-        output = remote_check_output(command)
+        output = run_on_remote(command)
         latency = float(output.splitlines()[-2].split(' ')[2][:-2])
         mem = float(output.splitlines()[-1].split(' ')[-2])
         return latency, mem
@@ -99,16 +99,16 @@ backend = eval(args.backend)()
 
 def prepare_vastai_env(device: str):
     if device == 'cpu':
-        output = host_check_output(["vastai", "search", "offers", "cpu_cores_effective>=8", '-o', 'dph', "--raw"])
+        output = run_on_host(["vastai", "search", "offers", "cpu_cores_effective>=8", '-o', 'dph', "--raw"])
     else:
         vast_gpu_name = vast_gpu_names[device]
-        output = host_check_output(["vastai", "search", "offers", f"gpu_name={vast_gpu_name} cpu_cores_effective>=8 cuda_vers>=11.8", '-o', 'dph', "--raw"])
+        output = run_on_host(["vastai", "search", "offers", f"gpu_name={vast_gpu_name} cpu_cores_effective>=8 cuda_vers>=11.8", '-o', 'dph', "--raw"])
     output = json.loads(output)
     if len(output) == 0:
         raise NoInstanceError(f"No Vast.ai offers found for {device}")
     best = output[0]["id"]
     log(f"Found best offer {best}")
-    output = host_check_output(f"vastai create instance {best} --image {backend.docker_image()} --disk 32 --raw".split())
+    output = run_on_host(f"vastai create instance {best} --image {backend.docker_image()} --disk 32 --raw".split())
     output = json.loads(output)
     instance_id = output["new_contract"]
     log(f"Created instance {instance_id}, checking status..")
@@ -121,7 +121,7 @@ def prepare_vastai_env(device: str):
             raise TimeoutError("Timeout waiting for instance to be ready")
         log("Checking status..")
         # too verbose
-        output = host_check_output(f"vastai show instances --raw".split())
+        output = run_on_host(f"vastai show instances --raw".split())
         output = json.loads(output)
         for instance in output:
             if instance["id"] == instance_id:
@@ -136,13 +136,13 @@ def prepare_vastai_env(device: str):
                     break
 
     tl.ssh_prefix = f'ssh -o StrictHostKeyChecking=no -p {tl.ssh_port} {tl.ssh_user_and_ip}'.split()
-    remote_check_output(['git', 'clone', backend.github_url()])
+    run_on_remote(['git', 'clone', backend.github_url()])
     basename = backend.basename()
     if args.branch != 'main':
         if '/' in args.branch:
             user, branch = args.branch.split('/')
-            remote_check_output([f'cd {basename} && git remote add daquexian https://github.com/{user}/{basename} && git fetch {user}'])
-        remote_check_output([f'cd {basename} && git checkout {args.branch}'])
+            run_on_remote([f'cd {basename} && git remote add daquexian https://github.com/{user}/{basename} && git fetch {user}'])
+        run_on_remote([f'cd {basename} && git checkout {args.branch}'])
 
     backend.prepare()
 
@@ -152,12 +152,12 @@ def scp(src, dst):
     subprocess.check_call(['scp', '-o', 'StrictHostKeyChecking=no', '-P', str(tl.ssh_port), src, f'{tl.ssh_user_and_ip}:{dst}'], stderr=subprocess.STDOUT, stdout=subprocess.DEVNULL)
 
 
-def remote_check_output(command: List[str]):
+def run_on_remote(command: List[str]):
     command = tl.ssh_prefix + [' '.join(command)]
-    return host_check_output(command)
+    return run_on_host(command)
 
 
-def host_check_output(command: List[str]):
+def run_on_host(command: List[str]):
     log(f'Running {" ".join(command)}')
     proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     stdout = ""
@@ -190,13 +190,13 @@ def run_on_device(device: str):
         return
     except TimeoutError:
         log(f"Timeout when preparing {device}, skipping")
-        host_check_output(['vastai', 'destroy', 'instance', str(tl.instance_id)])
+        run_on_host(['vastai', 'destroy', 'instance', str(tl.instance_id)])
         return
     except Exception as e:
         log('Fatal error')
         log(traceback.format_exc())
         try:
-            host_check_output(['vastai', 'destroy', 'instance', str(tl.instance_id)])
+            run_on_host(['vastai', 'destroy', 'instance', str(tl.instance_id)])
         except:
             pass
         return
@@ -220,7 +220,7 @@ def run_on_device(device: str):
                     log(traceback.format_exc())
         with lock:
             table.add_data(*data)
-    host_check_output(['vastai', 'destroy', 'instance', str(tl.instance_id)])
+    run_on_host(['vastai', 'destroy', 'instance', str(tl.instance_id)])
 
 
 with concurrent.futures.ThreadPoolExecutor() as executor:
