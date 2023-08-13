@@ -128,8 +128,7 @@ def prepare_vastai_env(device: str):
                 log(f"Instance {instance_id} is {instance['actual_status']}")
                 if instance["actual_status"] == "running":
                     tl.ssh_user_and_ip = f'root@{instance["ssh_host"]}'
-                    # https://github.com/vast-ai/vast-python/pull/56
-                    tl.ssh_port = instance["ssh_port"] - 1
+                    tl.ssh_port = instance["ssh_port"]
                     tl.instance_id = instance_id
                     flag = True
                     # sleep for a while to make sure the instance is ready
@@ -181,7 +180,7 @@ def run_on_device(device: str):
     tl.device = device
     try:
         # sleep a different period on every thread to bypass vast.ai rate limit
-        sleep_time = random.randint(0, 20)
+        sleep_time = random.random() * 20
         log(f"Sleeping for {sleep_time} seconds to bypass vast.ai rate limit")
         time.sleep(sleep_time)
         # refactor it as a contextmanager
